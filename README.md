@@ -25,14 +25,14 @@ curl -fsSL https://raw.githubusercontent.com/jinhoo5694/privacy-monitor/eva/inst
 
 ## 폰트
 
-기본은 macOS 내장 **Hiragino Sans W9** + Helvetica Condensed (에바 UI 느낌에 가까움).
+현재 번들된 폰트: **Refrigerator Deluxe** (CC BY 4.0, via [OnlineWebFonts.com](http://www.onlinewebfonts.com)).
+에반게리온 NERV UI의 영문 폰트로 널리 쓰이는 그 폰트입니다. 일본어는 시스템 Hiragino로 fallback.
 
-진짜 NERV 폰트(Matisse EB / Refrigerator Deluxe 등)로 바꾸려면:
-1. `.ttf` 또는 `.otf` 파일을 구해서
-2. `~/.hammerspoon/privacy-shield/fonts/` 에 드롭
-3. Hammerspoon 메뉴바 → **Reload Config**
+다른 폰트로 교체하려면:
+1. `~/.hammerspoon/privacy-shield/fonts/` 에 `.ttf / .otf / .woff / .woff2` 드롭
+2. Hammerspoon 메뉴바 → **Reload Config**
 
-폰트 파일이 있으면 `@font-face`로 자동 적용, 없으면 시스템 폰트로 fallback.
+`fonts/` 폴더의 첫 번째 폰트 파일이 `@font-face`의 `NERV` 패밀리로 자동 매핑됩니다.
 
 ## 이미지 추가/교체
 
