@@ -37,6 +37,7 @@ if _G._privacyShield then
     if old.hotkeyFull   then old.hotkeyFull:delete() end
     if old.ks1 then old.ks1:delete() end
     if old.ks2 then old.ks2:delete() end
+    if old.menubar then old.menubar:delete() end
     if old.overlays then
         for _, o in ipairs(old.overlays) do pcall(function() o:delete() end) end
     end
@@ -50,6 +51,7 @@ local state = {
     hiddenApps  = {},
     ks1         = nil,
     ks2         = nil,
+    ksVisible   = true,
 }
 
 local function scriptDir()
@@ -496,6 +498,46 @@ local function createKillSwitch(title, xPos, yPos, toggleFn)
     return c
 end
 
+-- Menubar ---------------------------------------------------------------------
+
+local function toggleKsVisibility()
+    state.ksVisible = not state.ksVisible
+    if state.ksVisible then
+        if state.ks1 then state.ks1:show() end
+        if state.ks2 then state.ks2:show() end
+    else
+        if state.ks1 then state.ks1:hide() end
+        if state.ks2 then state.ks2:hide() end
+    end
+end
+
+local function createMenubar()
+    local mb = hs.menubar.new()
+    mb:setTitle("N")
+    mb:setMenu(function()
+        local modeLabel = "OFF"
+        if state.mode == "second" then modeLabel = "2nd Monitor"
+        elseif state.mode == "full" then modeLabel = "Full" end
+
+        return {
+            { title = "Privacy Shield — EVA", disabled = true },
+            { title = "-" },
+            { title = state.ksVisible and "버튼 숨기기" or "버튼 표시",
+              fn = toggleKsVisibility },
+            { title = "-" },
+            { title = "⌃⌥⌘H  2nd Monitor",
+              fn = toggleSecond,
+              checked = (state.mode == "second") },
+            { title = "⌃⌥⌘F  Full Screen",
+              fn = toggleFull,
+              checked = (state.mode == "full") },
+            { title = "-" },
+            { title = "Status: " .. modeLabel, disabled = true },
+        }
+    end)
+    return mb
+end
+
 -- Bootstrap -------------------------------------------------------------------
 
 _G._privacyShield.hotkeySecond = hs.hotkey.bind(MODS, KEY_SECOND, toggleSecond)
@@ -507,5 +549,6 @@ state.ks2 = createKillSwitch("全域", scr.x + scr.w - KS_W * 2 - 24, scr.y + 8,
 _G._privacyShield.ks1      = state.ks1
 _G._privacyShield.ks2      = state.ks2
 _G._privacyShield.overlays = state.overlays
+_G._privacyShield.menubar  = createMenubar()
 
 hs.alert.show("Privacy Shield — EVA — ⌃⌥⌘H / ⌃⌥⌘F")
