@@ -1,61 +1,57 @@
-# privacy-monitor
+# privacy-monitor — EVA edition
 
-모니터 훔쳐보는 동료 퇴치용 Hammerspoon 스크립트.
+特務機関 NERV 테마. 모니터 훔쳐보는 동료에게 사도 요격 경보를 전시한다.
 
 `⌃⌥⌘H` 한 번 누르면:
 - iTerm2 빼고 모든 앱 창을 숨김
-- 두 번째 모니터에 이미지들을 흩뿌려 전시하고 사망선고 문구 출력
+- 두 번째 모니터에 빨간 경고등 깜빡이며 **使徒迎撃中 / A.T.フィールド展開 / WARNING** 등 NERV 스타일 HUD 전시
+- `images/eva/` 안의 이미지/GIF가 흩뿌려짐
 
 다시 누르면 원상복구.
 
 ## 설치 (macOS)
 
-터미널에 한 줄 붙여넣기:
-
 ```sh
-curl -fsSL https://raw.githubusercontent.com/jinhoo5694/privacy-monitor/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/jinhoo5694/privacy-monitor/eva/install.sh | bash
 ```
 
-설치 스크립트가 자동으로 처리합니다:
-- Homebrew 없으면 설치
-- Hammerspoon 없으면 설치 (`brew install --cask hammerspoon`)
-- `~/.hammerspoon/privacy-shield/`에 스크립트 복사
-- `~/.hammerspoon/init.lua`에 로더 한 줄 추가 (기존 설정 보존)
-- Hammerspoon 자동 실행 및 설정 리로드
+자동 처리:
+- Homebrew / Hammerspoon 없으면 설치
+- `~/.hammerspoon/privacy-shield/` 에 스크립트 + 이미지 + 폰트 복사
+- `~/.hammerspoon/init.lua` 에 로더 추가
+- Hammerspoon 실행 및 리로드
 
-설치 후 Hammerspoon이 **접근성(Accessibility) 권한**을 요청하면 허용해야 동작합니다.
-(시스템 설정 → 개인정보 보호 및 보안 → 손쉬운 사용)
+설치 후 **접근성(Accessibility) 권한** 허용 필수.
 
-## 사용법
+## 폰트
 
-- **토글**: `⌃⌥⌘H` (Control + Option + Command + H)
-- **이미지 교체**: `~/.hammerspoon/privacy-shield/images/` 폴더에 본인 이미지를 넣으세요.
-  - 지원 확장자: `.png .jpg .jpeg .gif .heic .bmp .webp`
-  - GIF는 애니메이션 그대로 재생됩니다.
-  - 파일 이름이 알파벳 순으로 정렬되니 `01_`, `02_` 같은 접두사로 순서 제어 가능.
-  - 이미지는 충돌 없이 격자 + 랜덤 지터로 흩뿌려 배치됩니다.
+기본은 macOS 내장 **Hiragino Sans W9** + Helvetica Condensed (에바 UI 느낌에 가까움).
+
+진짜 NERV 폰트(Matisse EB / Refrigerator Deluxe 등)로 바꾸려면:
+1. `.ttf` 또는 `.otf` 파일을 구해서
+2. `~/.hammerspoon/privacy-shield/fonts/` 에 드롭
+3. Hammerspoon 메뉴바 → **Reload Config**
+
+폰트 파일이 있으면 `@font-face`로 자동 적용, 없으면 시스템 폰트로 fallback.
+
+## 이미지 추가/교체
+
+`~/.hammerspoon/privacy-shield/images/eva/` 에 넣으세요.
+- 지원: `.png .jpg .jpeg .gif .heic .bmp .webp`
+- GIF는 애니메이션 재생
+- 충돌 없는 grid + jitter 배치
 
 ## 커스터마이즈
 
-`~/.hammerspoon/privacy-shield/init.lua` 상단 상수를 수정:
-
+`~/.hammerspoon/privacy-shield/init.lua` 상단 상수:
 - `MODS`, `KEY` — 단축키
-- `KEEP_APP` — 숨기지 않을 앱 (기본 `"iTerm2"`)
-- `MESSAGE`, `EMOJI` — 두 번째 모니터에 띄울 문구/이모지
-- `IMAGES_DIR` — 이미지 폴더 이름
+- `KEEP_APP` — 숨기지 않을 앱
+- `IMAGES_DIR`, `FONTS_DIR` — 경로
 
-수정 후 Hammerspoon 메뉴바 아이콘 → **Reload Config**.
+HTML/CSS로 텍스트, 색깔, 애니메이션 전부 수정 가능 (`buildHTML` 함수 내부).
 
 ## 제거
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/jinhoo5694/privacy-monitor/main/uninstall.sh | bash
+curl -fsSL https://raw.githubusercontent.com/jinhoo5694/privacy-monitor/eva/uninstall.sh | bash
 ```
-
-`~/.hammerspoon/privacy-shield/` 삭제 + `~/.hammerspoon/init.lua`에서 로더 한 줄 제거.
-Hammerspoon 본체와 Homebrew는 그대로 둡니다.
-
-## 주의
-
-- `⌃⌥⌘H`는 macOS 기본 단축키와 겹치지 않지만, 다른 앱에서 쓰고 있다면 `init.lua`의 `KEY`를 바꾸세요.
-- 두 번째 모니터가 없으면 토글 시 "no second monitor detected" 알림만 뜨고 아무 일도 일어나지 않습니다.

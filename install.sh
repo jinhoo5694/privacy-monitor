@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # privacy-monitor installer
-# Usage: curl -fsSL https://raw.githubusercontent.com/jinhoo5694/privacy-monitor/main/install.sh | bash
+# Usage: curl -fsSL https://raw.githubusercontent.com/jinhoo5694/privacy-monitor/eva/install.sh | bash
 set -euo pipefail
 
 REPO="jinhoo5694/privacy-monitor"
-BRANCH="main"
+BRANCH="eva"
 DEST="$HOME/.hammerspoon/privacy-shield"
 HS_DIR="$HOME/.hammerspoon"
 HS_INIT="$HS_DIR/init.lua"
@@ -43,20 +43,26 @@ curl -fsSL "https://github.com/${REPO}/archive/refs/heads/${BRANCH}.tar.gz" \
     | tar -xz -C "$TMP"
 SRC="$TMP/privacy-monitor-${BRANCH}"
 
-mkdir -p "$DEST/images"
+mkdir -p "$DEST/images" "$DEST/fonts"
 cp "$SRC/init.lua" "$DEST/init.lua"
 [ -f "$SRC/README.md" ] && cp "$SRC/README.md" "$DEST/README.md"
 
-# 이미지: 기존에 없는 파일만 복사 (사용자 커스텀 유지)
-if [ -d "$SRC/images" ]; then
-    for f in "$SRC/images"/*; do
-        [ -f "$f" ] || continue
-        name="$(basename "$f")"
-        if [ ! -f "$DEST/images/$name" ]; then
-            cp "$f" "$DEST/images/$name"
+# 이미지 / 폰트: 기존에 없는 파일만 복사 (하위 폴더 구조 유지, 사용자 커스텀 보존)
+copy_tree_preserving() {
+    local src_root="$1" dst_root="$2"
+    [ -d "$src_root" ] || return 0
+    ( cd "$src_root" && find . -type f ) | while read -r rel; do
+        rel="${rel#./}"
+        local src_file="$src_root/$rel"
+        local dst_file="$dst_root/$rel"
+        mkdir -p "$(dirname "$dst_file")"
+        if [ ! -e "$dst_file" ]; then
+            cp "$src_file" "$dst_file"
         fi
     done
-fi
+}
+copy_tree_preserving "$SRC/images" "$DEST/images"
+copy_tree_preserving "$SRC/fonts"  "$DEST/fonts"
 
 mkdir -p "$HS_DIR"
 if [ -f "$HS_INIT" ]; then
@@ -71,14 +77,15 @@ open -a Hammerspoon 2>/dev/null || true
 sleep 1
 osascript -e 'tell application "Hammerspoon" to reload' 2>/dev/null || true
 
-c_green "✓ Privacy Shield 설치 완료!"
+c_green "✓ Privacy Shield — EVA — 설치 완료!"
 cat <<EOF
 
 다음 단계:
   1. Hammerspoon이 접근성 권한을 요청하면 허용
      (시스템 설정 → 개인정보 보호 및 보안 → 손쉬운 사용)
-  2. ⌃⌥⌘H 로 온/오프 토글
-  3. 이미지 추가: $DEST/images/
+  2. ⌃⌥⌘H 로 온/오프 토글 (NERV 경보 모드)
+  3. 이미지 추가: $DEST/images/eva/
+  4. 폰트 교체: $DEST/fonts/ 에 .ttf 드롭
 
 제거:
   curl -fsSL https://raw.githubusercontent.com/${REPO}/${BRANCH}/uninstall.sh | bash

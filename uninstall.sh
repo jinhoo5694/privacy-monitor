@@ -15,5 +15,5 @@ rm -rf "$DEST"
 
 osascript -e 'tell application "Hammerspoon" to reload' 2>/dev/null || true
 
-echo "✓ Privacy Shield 제거 완료."
+echo "✓ Privacy Shield — EVA — 제거 완료."
 echo "  Hammerspoon과 Homebrew는 그대로 둡니다 — 필요하면 직접 제거하세요."

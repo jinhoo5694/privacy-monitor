@@ -1,16 +1,16 @@
--- Privacy Shield: hide everything except iTerm2, taunt the creeper on screen 2.
+-- Privacy Shield — EVA edition.
+-- 特務機関 NERV 모드: 사도 요격 경보를 두 번째 모니터에 띄운다.
 -- Hotkey: Control + Option + Command + H
 
 local MODS = { "ctrl", "alt", "cmd" }
 local KEY  = "H"
 local KEEP_APP = "iTerm2"
 
-local MESSAGE = "남의 모니터 뭐가 그래 재밌어보이노 그만봐라"
-local EMOJI   = "👀"
+local IMAGES_DIR = "images/eva"
+local FONTS_DIR  = "fonts"
 
--- Drop image files into ./images next to this script. Animated GIFs animate
--- (rendered via WKWebView). If the folder is empty, the emoji is shown.
-local IMAGES_DIR = "images"
+-- Drop a .ttf / .otf into the fonts/ folder to override the "NERV" font face.
+-- If empty, falls back to macOS system heavy fonts (very close to Eva UI look).
 
 local MIME = {
     png  = "image/png",
@@ -20,6 +20,13 @@ local MIME = {
     heic = "image/heic",
     bmp  = "image/bmp",
     webp = "image/webp",
+}
+
+local FONT_MIME = {
+    ttf = "font/ttf",
+    otf = "font/otf",
+    woff = "font/woff",
+    woff2 = "font/woff2",
 }
 
 local state = {
@@ -34,26 +41,26 @@ local function scriptDir()
     return info:match("(.*/)") or "./"
 end
 
-local function loadImages()
-    local dir = scriptDir() .. IMAGES_DIR
-    local files = {}
-    if not hs.fs.attributes(dir) then return files end
-    for file in hs.fs.dir(dir) do
+local function listFiles(dir, extensions)
+    local full = scriptDir() .. dir
+    local out = {}
+    if not hs.fs.attributes(full) then return out end
+    for file in hs.fs.dir(full) do
         local ext = file:lower():match("%.(%w+)$")
-        if ext and MIME[ext] then
-            table.insert(files, { path = dir .. "/" .. file, ext = ext })
+        if ext and extensions[ext] then
+            table.insert(out, { path = full .. "/" .. file, ext = ext })
         end
     end
-    table.sort(files, function(a, b) return a.path < b.path end)
-    return files
+    table.sort(out, function(a, b) return a.path < b.path end)
+    return out
 end
 
-local function fileToDataURI(entry)
+local function fileToDataURI(entry, mimeTable)
     local f = io.open(entry.path, "rb")
     if not f then return nil end
     local data = f:read("*all")
     f:close()
-    return "data:" .. MIME[entry.ext] .. ";base64," .. hs.base64.encode(data)
+    return "data:" .. mimeTable[entry.ext] .. ";base64," .. hs.base64.encode(data)
 end
 
 local function shuffle(t)
@@ -63,8 +70,7 @@ local function shuffle(t)
     end
 end
 
--- Lay out N images on a grid so they don't overlap. Each cell gets a bit of
--- random size + position jitter so it still feels scattered.
+-- Scatter images on a grid with jitter — no overlaps, still chaotic.
 local function scatter(frame, images)
     local n = #images
     if n == 0 then return {} end
@@ -87,50 +93,231 @@ local function scatter(frame, images)
     local placed = {}
     for i, entry in ipairs(images) do
         local cell = cells[i]
-        local sizeRatio = 0.72 + math.random() * 0.20  -- 72–92% of cell
+        local sizeRatio = 0.72 + math.random() * 0.20
         local imgW = cellW * sizeRatio
         local imgH = cellH * sizeRatio
         local x = cell.col * cellW + (cellW - imgW) * math.random()
         local y = cell.row * cellH + (cellH - imgH) * math.random()
-        placed[i] = {
-            entry = entry,
-            x = x, y = y, w = imgW, h = imgH,
-        }
+        placed[i] = { entry = entry, x = x, y = y, w = imgW, h = imgH }
     end
     return placed
 end
 
+local function buildFontFace()
+    local fonts = listFiles(FONTS_DIR, FONT_MIME)
+    if #fonts == 0 then return "" end
+    -- Use the first font file as the NERV face.
+    local uri = fileToDataURI(fonts[1], FONT_MIME)
+    if not uri then return "" end
+    return string.format([[
+@font-face {
+  font-family: "NERV";
+  src: url("%s");
+  font-weight: 900;
+  font-display: block;
+}
+]], uri)
+end
+
 local function buildHTML(frame)
-    local images = loadImages()
+    local images = listFiles(IMAGES_DIR, MIME)
     local placed = scatter(frame, images)
 
     local imgsHtml = ""
-    if #placed > 0 then
-        for _, p in ipairs(placed) do
-            local uri = fileToDataURI(p.entry)
-            if uri then
-                imgsHtml = imgsHtml .. string.format(
-                    '<img src="%s" style="left:%.3f%%;top:%.3f%%;width:%.3f%%;height:%.3f%%;" />',
-                    uri, p.x, p.y, p.w, p.h)
-            end
+    for _, p in ipairs(placed) do
+        local uri = fileToDataURI(p.entry, MIME)
+        if uri then
+            imgsHtml = imgsHtml .. string.format(
+                '<img src="%s" style="left:%.3f%%;top:%.3f%%;width:%.3f%%;height:%.3f%%;" />',
+                uri, p.x, p.y, p.w, p.h)
         end
-    else
-        imgsHtml = '<div class="emoji">' .. EMOJI .. '</div>'
     end
 
+    local fontFace = buildFontFace()
+
     local css = [[
-html,body{margin:0;padding:0;background:#000;width:100vw;height:100vh;overflow:hidden;
-  font-family:"Apple SD Gothic Neo",-apple-system,sans-serif;}
-img{position:absolute;object-fit:contain;}
-.emoji{position:absolute;top:18%;left:0;width:100%;text-align:center;font-size:220px;}
-.msg{position:absolute;top:70%;left:3%;width:94%;height:20%;text-align:center;
-  color:#fff;font-size:80px;font-weight:700;background:rgba(0,0,0,0.78);
-  display:flex;align-items:center;justify-content:center;}
+html, body {
+  margin: 0; padding: 0;
+  width: 100vw; height: 100vh;
+  background: #050000;
+  overflow: hidden;
+  color: #ff6600;
+  font-family: "NERV", "Impact", "Helvetica Neue Condensed Bold",
+               "Hiragino Sans", "Hiragino Kaku Gothic StdN", sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+.images img {
+  position: absolute;
+  object-fit: contain;
+  filter: saturate(0.85) contrast(1.05);
+}
+
+.warning-border {
+  position: fixed; inset: 0;
+  box-shadow: inset 0 0 0 28px #ff0000,
+              inset 0 0 140px 28px rgba(255, 0, 0, 0.55);
+  pointer-events: none;
+  animation: alarmBlink 0.45s steps(1) infinite;
+  z-index: 50;
+}
+@keyframes alarmBlink {
+  0%, 49.99% { opacity: 1; }
+  50%, 100%  { opacity: 0.18; }
+}
+
+.scan-lines {
+  position: fixed; inset: 0;
+  background: linear-gradient(rgba(255,255,255,0.02) 50%,
+                              rgba(0,0,0,0.22) 50%);
+  background-size: 100% 4px;
+  pointer-events: none;
+  mix-blend-mode: overlay;
+  z-index: 60;
+}
+
+.nerv-logo {
+  position: absolute;
+  top: 3%; right: 3%;
+  color: #ff7a00;
+  font-size: 90px;
+  font-weight: 900;
+  letter-spacing: 0.35em;
+  text-shadow: 0 0 18px rgba(255, 122, 0, 0.9);
+  z-index: 70;
+}
+.nerv-logo small {
+  display: block;
+  font-size: 22px;
+  letter-spacing: 0.25em;
+  color: #ffaa55;
+  margin-top: 4px;
+}
+
+.text-warning {
+  position: absolute;
+  top: 4%; left: 4%;
+  color: #ff8800;
+  font-size: 120px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-shadow: 0 0 28px rgba(255, 136, 0, 0.8);
+  animation: warnBlink 0.35s steps(1) infinite;
+  z-index: 70;
+}
+@keyframes warnBlink {
+  0%, 49.99% { opacity: 1; }
+  50%, 100%  { opacity: 0.35; }
+}
+
+.text-main {
+  position: absolute;
+  bottom: 22%;
+  left: 0; width: 100%;
+  text-align: center;
+  color: #ffd400;
+  font-size: 180px;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  text-shadow: 0 0 48px rgba(255, 40, 0, 0.9),
+               0 0 18px rgba(0, 0, 0, 0.85);
+  z-index: 70;
+}
+
+.text-sub {
+  position: absolute;
+  bottom: 10%;
+  left: 0; width: 100%;
+  text-align: center;
+  color: #ff3b00;
+  font-size: 96px;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  text-shadow: 0 0 32px rgba(255, 0, 0, 0.8),
+               0 0 10px rgba(0, 0, 0, 0.9);
+  z-index: 70;
+}
+
+.side-texts {
+  position: absolute;
+  top: 35%; left: 2%;
+  color: #ff0000;
+  font-size: 46px;
+  font-weight: 900;
+  line-height: 1.35;
+  text-shadow: 0 0 12px rgba(255, 0, 0, 0.8);
+  animation: warnBlink 0.55s steps(1) infinite;
+  z-index: 70;
+}
+
+.status-bar {
+  position: absolute;
+  top: 40%; right: 2%;
+  text-align: right;
+  color: #ffa500;
+  font-size: 28px;
+  letter-spacing: 0.12em;
+  line-height: 1.6;
+  font-family: "Menlo", "Courier New", monospace;
+  text-shadow: 0 0 10px rgba(255, 165, 0, 0.6);
+  z-index: 70;
+}
+.status-bar .val { color: #ff0000; }
+
+.pattern-blue {
+  position: absolute;
+  bottom: 2.5%; right: 3%;
+  color: #00c8ff;
+  font-size: 44px;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  font-family: "Menlo", "Courier New", monospace;
+  text-shadow: 0 0 14px rgba(0, 200, 255, 0.7);
+  z-index: 70;
+}
+
+.crosshair {
+  position: absolute;
+  top: 50%; left: 50%;
+  width: 320px; height: 320px;
+  margin: -160px 0 0 -160px;
+  border: 2px solid rgba(255, 120, 0, 0.45);
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 55;
+}
+.crosshair::before,
+.crosshair::after {
+  content: "";
+  position: absolute;
+  background: rgba(255, 120, 0, 0.45);
+}
+.crosshair::before { top: 0; bottom: 0; left: 50%; width: 1px; }
+.crosshair::after  { left: 0; right: 0; top: 50%; height: 1px; }
 ]]
 
-    return "<!DOCTYPE html><html><head><meta charset='utf-8'><style>" ..
-           css .. "</style></head><body>" .. imgsHtml ..
-           "<div class='msg'>" .. MESSAGE .. "</div></body></html>"
+    return table.concat({
+        "<!DOCTYPE html><html><head><meta charset='utf-8'><style>",
+        fontFace, css,
+        "</style></head><body>",
+        "<div class='images'>", imgsHtml, "</div>",
+        "<div class='crosshair'></div>",
+        "<div class='warning-border'></div>",
+        "<div class='scan-lines'></div>",
+        "<div class='nerv-logo'>NERV<small>特務機関</small></div>",
+        "<div class='text-warning'>WARNING</div>",
+        "<div class='side-texts'>警告<br>警告<br>緊急事態発生<br>迎撃開始</div>",
+        "<div class='status-bar'>",
+          "NERV CENTRAL DOGMA<br>",
+          "AT FIELD : <span class='val'>ACTIVE</span><br>",
+          "STATUS : <span class='val'>ENGAGING</span><br>",
+          "MAGI : <span class='val'>CASPER · MELCHIOR · BALTHASAR</span>",
+        "</div>",
+        "<div class='text-main'>使徒迎撃中</div>",
+        "<div class='text-sub'>A.T.フィールド展開</div>",
+        "<div class='pattern-blue'>PATTERN : BLUE</div>",
+        "</body></html>",
+    })
 end
 
 local function buildOverlay()
@@ -203,4 +390,4 @@ hs.hotkey.bind(MODS, KEY, function()
     if state.active then deactivate() else activate() end
 end)
 
-hs.alert.show("Privacy Shield loaded — ⌃⌥⌘H")
+hs.alert.show("Privacy Shield — EVA — ⌃⌥⌘H")
