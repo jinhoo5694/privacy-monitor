@@ -24,6 +24,15 @@ local MIME = {
 
 local KS_W, KS_H = 180, 44
 
+-- Cleanup previous load (prevents duplicates on Reload Config).
+if _G._privacyShield then
+    local old = _G._privacyShield
+    if old.hotkey then old.hotkey:delete() end
+    if old.killSwitch then old.killSwitch:delete() end
+    if old.overlay then old.overlay:delete() end
+end
+_G._privacyShield = {}
+
 local state = {
     active      = false,
     overlay     = nil,
@@ -305,7 +314,8 @@ local function createKillSwitch()
     return c
 end
 
-hs.hotkey.bind(MODS, KEY, function() toggleShield() end)
+_G._privacyShield.hotkey    = hs.hotkey.bind(MODS, KEY, function() toggleShield() end)
+state.killSwitch            = createKillSwitch()
+_G._privacyShield.killSwitch = state.killSwitch
 
-state.killSwitch = createKillSwitch()
 hs.alert.show("Privacy Shield loaded — ⌃⌥⌘H")
