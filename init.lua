@@ -1,15 +1,15 @@
--- Privacy Shield: hide everything except iTerm2, taunt the creeper on screen 2.
--- Hotkey: Control + Option + Command + H
+-- Privacy Shield: hide everything except iTerm2, taunt the creeper.
+-- ⌃⌥⌘H: overlay on second monitor only (keep iTerm2 on primary)
+-- ⌃⌥⌘F: overlay on ALL monitors (total blackout)
 
-local MODS = { "ctrl", "alt", "cmd" }
-local KEY  = "H"
-local KEEP_APP = "iTerm2"
+local MODS       = { "ctrl", "alt", "cmd" }
+local KEY_SECOND = "H"
+local KEY_FULL   = "F"
+local KEEP_APP   = "iTerm2"
 
 local MESSAGE = "남의 모니터 뭐가 그래 재밌어보이노 그만봐라"
 local EMOJI   = "👀"
 
--- Drop image files into ./images next to this script. Animated GIFs animate
--- (rendered via WKWebView). If the folder is empty, the emoji is shown.
 local IMAGES_DIR = "images"
 
 local MIME = {
@@ -22,23 +22,28 @@ local MIME = {
     webp = "image/webp",
 }
 
-local KS_W, KS_H = 180, 44
+local KS_W, KS_H = 160, 44
 
 -- Cleanup previous load (prevents duplicates on Reload Config).
 if _G._privacyShield then
     local old = _G._privacyShield
-    if old.hotkey then old.hotkey:delete() end
-    if old.killSwitch then old.killSwitch:delete() end
-    if old.overlay then old.overlay:delete() end
+    if old.hotkeySecond then old.hotkeySecond:delete() end
+    if old.hotkeyFull   then old.hotkeyFull:delete() end
+    if old.ks1 then old.ks1:delete() end
+    if old.ks2 then old.ks2:delete() end
+    if old.overlays then
+        for _, o in ipairs(old.overlays) do pcall(function() o:delete() end) end
+    end
 end
 _G._privacyShield = {}
 
 local state = {
     active      = false,
-    overlay     = nil,
+    mode        = nil,   -- nil | "second" | "full"
+    overlays    = {},
     hiddenApps  = {},
-    previousApp = nil,
-    killSwitch  = nil,
+    ks1         = nil,
+    ks2         = nil,
 }
 
 local function scriptDir()
@@ -75,8 +80,6 @@ local function shuffle(t)
     end
 end
 
--- Lay out N images on a grid so they don't overlap. Each cell gets a bit of
--- random size + position jitter so it still feels scattered.
 local function scatter(frame, images)
     local n = #images
     if n == 0 then return {} end
@@ -99,15 +102,12 @@ local function scatter(frame, images)
     local placed = {}
     for i, entry in ipairs(images) do
         local cell = cells[i]
-        local sizeRatio = 0.72 + math.random() * 0.20  -- 72–92% of cell
+        local sizeRatio = 0.72 + math.random() * 0.20
         local imgW = cellW * sizeRatio
         local imgH = cellH * sizeRatio
         local x = cell.col * cellW + (cellW - imgW) * math.random()
         local y = cell.row * cellH + (cellH - imgH) * math.random()
-        placed[i] = {
-            entry = entry,
-            x = x, y = y, w = imgW, h = imgH,
-        }
+        placed[i] = { entry = entry, x = x, y = y, w = imgW, h = imgH }
     end
     return placed
 end
@@ -135,7 +135,7 @@ html,body{margin:0;padding:0;background:#000;width:100vw;height:100vh;overflow:h
   font-family:"Apple SD Gothic Neo",-apple-system,sans-serif;}
 img{position:absolute;object-fit:contain;}
 .emoji{position:absolute;top:18%;left:0;width:100%;text-align:center;font-size:220px;}
-.msg{position:absolute;top:70%;left:3%;width:94%;height:20%;text-align:center;
+.msg{position:absolute;top:35%;left:3%;width:94%;height:20%;text-align:center;
   color:#fff;font-size:80px;font-weight:700;background:rgba(0,0,0,0.78);
   display:flex;align-items:center;justify-content:center;}
 ]]
@@ -145,16 +145,8 @@ img{position:absolute;object-fit:contain;}
            "<div class='msg'>" .. MESSAGE .. "</div></body></html>"
 end
 
-local function buildOverlay()
-    local screens = hs.screen.allScreens()
-    if #screens < 2 then
-        hs.alert.show("Privacy Shield: no second monitor detected")
-        return nil
-    end
-
-    math.randomseed(os.time())
-
-    local frame = screens[2]:fullFrame()
+local function buildOverlay(screen)
+    local frame = screen:fullFrame()
     local html  = buildHTML(frame)
 
     local wv = hs.webview.new(frame)
@@ -190,102 +182,111 @@ local function restoreApps(apps)
     end
 end
 
-local function activate()
-    state.previousApp = hs.application.frontmostApplication()
-    state.hiddenApps  = hideOtherApps()
-    state.overlay     = buildOverlay()
-
-    local iterm = hs.application.find(KEEP_APP)
-    if iterm then iterm:activate(true) end
-
-    state.active = true
-end
-
 local function deactivate()
-    if state.overlay then
-        state.overlay:delete()
-        state.overlay = nil
+    for _, wv in ipairs(state.overlays) do
+        pcall(function() wv:delete() end)
     end
+    state.overlays = {}
     restoreApps(state.hiddenApps)
     state.hiddenApps = {}
     state.active = false
+    state.mode   = nil
 end
 
--- Kill switch: floating toggle button, always on top, draggable.
-local function updateKillSwitch()
-    local ks = state.killSwitch
-    if not ks then return end
-    if state.active then
-        ks["dot"].fillColor      = { red = 1, green = 0.15, blue = 0.1, alpha = 1 }
-        ks["label"].text         = "ON"
-        ks["label"].textColor    = { red = 1, green = 0.2, blue = 0.1, alpha = 1 }
-        ks["border"].strokeColor = { red = 1, green = 0.15, blue = 0.1, alpha = 1 }
-    else
-        ks["dot"].fillColor      = { red = 0, green = 0.75, blue = 0.3, alpha = 1 }
-        ks["label"].text         = "OFF"
-        ks["label"].textColor    = { red = 0.85, green = 0.85, blue = 0.85, alpha = 1 }
-        ks["border"].strokeColor = { red = 0.4, green = 0.4, blue = 0.4, alpha = 1 }
+local function activateSecond()
+    if state.active then deactivate() end
+    local screens = hs.screen.allScreens()
+    if #screens < 2 then
+        hs.alert.show("Privacy Shield: no second monitor detected")
+        return
     end
+    math.randomseed(os.time())
+    state.hiddenApps = hideOtherApps()
+    table.insert(state.overlays, buildOverlay(screens[2]))
+    local iterm = hs.application.find(KEEP_APP)
+    if iterm then iterm:activate(true) end
+    state.active = true
+    state.mode   = "second"
 end
 
-local function toggleShield()
-    if state.active then deactivate() else activate() end
-    updateKillSwitch()
+local function activateFull()
+    if state.active then deactivate() end
+    math.randomseed(os.time())
+    -- Don't hide apps — opaque overlay covers everything anyway.
+    for _, screen in ipairs(hs.screen.allScreens()) do
+        table.insert(state.overlays, buildOverlay(screen))
+    end
+    state.active = true
+    state.mode   = "full"
 end
 
-local function createKillSwitch()
-    local screen = hs.screen.primaryScreen():frame()
-    local x = screen.x + screen.w - KS_W - 16
-    local y = screen.y + 8
+-- Kill switches ---------------------------------------------------------------
 
-    local c = hs.canvas.new({ x = x, y = y, w = KS_W, h = KS_H })
+local function updateKillSwitches()
+    local function applyStyle(ks, on)
+        if not ks then return end
+        if on then
+            ks["dot"].fillColor      = { red = 1, green = 0.15, blue = 0.1, alpha = 1 }
+            ks["label"].text         = "ON"
+            ks["label"].textColor    = { red = 1, green = 0.2, blue = 0.1, alpha = 1 }
+            ks["border"].strokeColor = { red = 1, green = 0.15, blue = 0.1, alpha = 1 }
+        else
+            ks["dot"].fillColor      = { red = 0, green = 0.75, blue = 0.3, alpha = 1 }
+            ks["label"].text         = "OFF"
+            ks["label"].textColor    = { red = 0.85, green = 0.85, blue = 0.85, alpha = 1 }
+            ks["border"].strokeColor = { red = 0.4, green = 0.4, blue = 0.4, alpha = 1 }
+        end
+    end
+    applyStyle(state.ks1, state.mode == "second")
+    applyStyle(state.ks2, state.mode == "full")
+end
 
-    -- 1: background
+local function toggleSecond()
+    if state.active and state.mode == "second" then deactivate()
+    else activateSecond() end
+    updateKillSwitches()
+end
+
+local function toggleFull()
+    if state.active and state.mode == "full" then deactivate()
+    else activateFull() end
+    updateKillSwitches()
+end
+
+local function createKillSwitch(title, xPos, yPos, toggleFn)
+    local c = hs.canvas.new({ x = xPos, y = yPos, w = KS_W, h = KS_H })
+
     c:appendElements({
-        type = "rectangle",
-        action = "fill",
+        type = "rectangle", action = "fill",
         fillColor = { red = 0.1, green = 0.1, blue = 0.1, alpha = 0.92 },
         roundedRectRadii = { xRadius = 8, yRadius = 8 },
     })
-    -- 2: border
     c:appendElements({
-        id = "border",
-        type = "rectangle",
-        action = "stroke",
+        id = "border", type = "rectangle", action = "stroke",
         strokeColor = { red = 0.4, green = 0.4, blue = 0.4, alpha = 1 },
         strokeWidth = 2,
         roundedRectRadii = { xRadius = 8, yRadius = 8 },
     })
-    -- 3: title
     c:appendElements({
-        type = "text",
-        text = "Shield",
+        type = "text", text = title,
         textColor = { red = 0.85, green = 0.85, blue = 0.85, alpha = 1 },
-        textSize = 18,
-        textFont = "Helvetica-Bold",
-        frame = { x = "6%", y = "12%", w = "40%", h = "76%" },
+        textSize = 16, textFont = "Helvetica-Bold",
+        frame = { x = "6%", y = "12%", w = "38%", h = "76%" },
     })
-    -- 4: status dot
     c:appendElements({
-        id = "dot",
-        type = "circle",
-        action = "fill",
+        id = "dot", type = "circle", action = "fill",
         fillColor = { red = 0, green = 0.75, blue = 0.3, alpha = 1 },
-        center = { x = "55%", y = "50%" },
-        radius = "9%",
+        center = { x = "52%", y = "50%" }, radius = "9%",
     })
-    -- 5: status label
     c:appendElements({
-        id = "label",
-        type = "text",
-        text = "OFF",
+        id = "label", type = "text", text = "OFF",
         textColor = { red = 0.85, green = 0.85, blue = 0.85, alpha = 1 },
-        textSize = 16,
-        textFont = "Helvetica-Bold",
-        frame = { x = "62%", y = "12%", w = "34%", h = "76%" },
+        textSize = 14, textFont = "Helvetica-Bold",
+        frame = { x = "58%", y = "12%", w = "38%", h = "76%" },
     })
 
-    c:level(hs.drawing.windowLevels.floating)
+    -- screenSaver level so buttons stay above overlays in full mode.
+    c:level(hs.drawing.windowLevels.screenSaver)
     c:canvasMouseEvents(true, true, false, true)
 
     local drag = nil
@@ -295,17 +296,11 @@ local function createKillSwitch()
             local f   = canvas:frame()
             drag = { ox = pos.x - f.x, oy = pos.y - f.y, moved = false }
         elseif msg == "mouseUp" then
-            if drag and not drag.moved then
-                toggleShield()
-            end
+            if drag and not drag.moved then toggleFn() end
             drag = nil
         elseif msg == "mouseMove" and drag then
             local pos = hs.mouse.absolutePosition()
-            canvas:frame({
-                x = pos.x - drag.ox,
-                y = pos.y - drag.oy,
-                w = KS_W, h = KS_H,
-            })
+            canvas:frame({ x = pos.x - drag.ox, y = pos.y - drag.oy, w = KS_W, h = KS_H })
             drag.moved = true
         end
     end)
@@ -314,8 +309,16 @@ local function createKillSwitch()
     return c
 end
 
-_G._privacyShield.hotkey    = hs.hotkey.bind(MODS, KEY, function() toggleShield() end)
-state.killSwitch            = createKillSwitch()
-_G._privacyShield.killSwitch = state.killSwitch
+-- Bootstrap -------------------------------------------------------------------
 
-hs.alert.show("Privacy Shield loaded — ⌃⌥⌘H")
+_G._privacyShield.hotkeySecond = hs.hotkey.bind(MODS, KEY_SECOND, toggleSecond)
+_G._privacyShield.hotkeyFull   = hs.hotkey.bind(MODS, KEY_FULL,   toggleFull)
+
+local scr = hs.screen.primaryScreen():frame()
+state.ks1 = createKillSwitch("2nd",  scr.x + scr.w - KS_W - 16,     scr.y + 8, toggleSecond)
+state.ks2 = createKillSwitch("Full", scr.x + scr.w - KS_W * 2 - 24, scr.y + 8, toggleFull)
+_G._privacyShield.ks1      = state.ks1
+_G._privacyShield.ks2      = state.ks2
+_G._privacyShield.overlays = state.overlays
+
+hs.alert.show("Privacy Shield loaded — ⌃⌥⌘H / ⌃⌥⌘F")
