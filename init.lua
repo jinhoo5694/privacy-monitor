@@ -22,11 +22,14 @@ local MIME = {
     webp = "image/webp",
 }
 
+local KS_W, KS_H = 180, 44
+
 local state = {
     active      = false,
     overlay     = nil,
     hiddenApps  = {},
     previousApp = nil,
+    killSwitch  = nil,
 }
 
 local function scriptDir()
@@ -199,8 +202,110 @@ local function deactivate()
     state.active = false
 end
 
-hs.hotkey.bind(MODS, KEY, function()
-    if state.active then deactivate() else activate() end
-end)
+-- Kill switch: floating toggle button, always on top, draggable.
+local function updateKillSwitch()
+    local ks = state.killSwitch
+    if not ks then return end
+    if state.active then
+        ks["dot"].fillColor      = { red = 1, green = 0.15, blue = 0.1, alpha = 1 }
+        ks["label"].text         = "ON"
+        ks["label"].textColor    = { red = 1, green = 0.2, blue = 0.1, alpha = 1 }
+        ks["border"].strokeColor = { red = 1, green = 0.15, blue = 0.1, alpha = 1 }
+    else
+        ks["dot"].fillColor      = { red = 0, green = 0.75, blue = 0.3, alpha = 1 }
+        ks["label"].text         = "OFF"
+        ks["label"].textColor    = { red = 0.85, green = 0.85, blue = 0.85, alpha = 1 }
+        ks["border"].strokeColor = { red = 0.4, green = 0.4, blue = 0.4, alpha = 1 }
+    end
+end
 
+local function toggleShield()
+    if state.active then deactivate() else activate() end
+    updateKillSwitch()
+end
+
+local function createKillSwitch()
+    local screen = hs.screen.primaryScreen():frame()
+    local x = screen.x + screen.w - KS_W - 16
+    local y = screen.y + 8
+
+    local c = hs.canvas.new({ x = x, y = y, w = KS_W, h = KS_H })
+
+    -- 1: background
+    c:appendElements({
+        type = "rectangle",
+        action = "fill",
+        fillColor = { red = 0.1, green = 0.1, blue = 0.1, alpha = 0.92 },
+        roundedRectRadii = { xRadius = 8, yRadius = 8 },
+    })
+    -- 2: border
+    c:appendElements({
+        id = "border",
+        type = "rectangle",
+        action = "stroke",
+        strokeColor = { red = 0.4, green = 0.4, blue = 0.4, alpha = 1 },
+        strokeWidth = 2,
+        roundedRectRadii = { xRadius = 8, yRadius = 8 },
+    })
+    -- 3: title
+    c:appendElements({
+        type = "text",
+        text = "Shield",
+        textColor = { red = 0.85, green = 0.85, blue = 0.85, alpha = 1 },
+        textSize = 18,
+        textFont = "Helvetica-Bold",
+        frame = { x = "6%", y = "12%", w = "40%", h = "76%" },
+    })
+    -- 4: status dot
+    c:appendElements({
+        id = "dot",
+        type = "circle",
+        action = "fill",
+        fillColor = { red = 0, green = 0.75, blue = 0.3, alpha = 1 },
+        center = { x = "55%", y = "50%" },
+        radius = "9%",
+    })
+    -- 5: status label
+    c:appendElements({
+        id = "label",
+        type = "text",
+        text = "OFF",
+        textColor = { red = 0.85, green = 0.85, blue = 0.85, alpha = 1 },
+        textSize = 16,
+        textFont = "Helvetica-Bold",
+        frame = { x = "62%", y = "12%", w = "34%", h = "76%" },
+    })
+
+    c:level(hs.drawing.windowLevels.floating)
+    c:canvasMouseEvents(true, true, false, true)
+
+    local drag = nil
+    c:mouseCallback(function(canvas, msg, id, mx, my)
+        if msg == "mouseDown" then
+            local pos = hs.mouse.absolutePosition()
+            local f   = canvas:frame()
+            drag = { ox = pos.x - f.x, oy = pos.y - f.y, moved = false }
+        elseif msg == "mouseUp" then
+            if drag and not drag.moved then
+                toggleShield()
+            end
+            drag = nil
+        elseif msg == "mouseMove" and drag then
+            local pos = hs.mouse.absolutePosition()
+            canvas:frame({
+                x = pos.x - drag.ox,
+                y = pos.y - drag.oy,
+                w = KS_W, h = KS_H,
+            })
+            drag.moved = true
+        end
+    end)
+
+    c:show()
+    return c
+end
+
+hs.hotkey.bind(MODS, KEY, function() toggleShield() end)
+
+state.killSwitch = createKillSwitch()
 hs.alert.show("Privacy Shield loaded — ⌃⌥⌘H")
