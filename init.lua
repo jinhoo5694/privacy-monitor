@@ -29,11 +29,14 @@ local FONT_MIME = {
     woff2 = "font/woff2",
 }
 
+local KS_W, KS_H = 210, 50
+
 local state = {
     active      = false,
     overlay     = nil,
     hiddenApps  = {},
     previousApp = nil,
+    killSwitch  = nil,
 }
 
 local function scriptDir()
@@ -386,8 +389,110 @@ local function deactivate()
     state.active = false
 end
 
-hs.hotkey.bind(MODS, KEY, function()
-    if state.active then deactivate() else activate() end
-end)
+-- Kill switch: floating NERV-style toggle button, always on top, draggable.
+local function updateKillSwitch()
+    local ks = state.killSwitch
+    if not ks then return end
+    if state.active then
+        ks["dot"].fillColor    = { red = 1, green = 0, blue = 0, alpha = 1 }
+        ks["status"].text      = "迎撃中"
+        ks["status"].textColor = { red = 1, green = 0.2, blue = 0.1, alpha = 1 }
+        ks["border"].strokeColor = { red = 1, green = 0, blue = 0, alpha = 1 }
+    else
+        ks["dot"].fillColor    = { red = 0, green = 0.8, blue = 0.27, alpha = 1 }
+        ks["status"].text      = "待機中"
+        ks["status"].textColor = { red = 0.93, green = 0.93, blue = 0.93, alpha = 1 }
+        ks["border"].strokeColor = { red = 1, green = 0.4, blue = 0, alpha = 1 }
+    end
+end
 
+local function toggleShield()
+    if state.active then deactivate() else activate() end
+    updateKillSwitch()
+end
+
+local function createKillSwitch()
+    local screen = hs.screen.primaryScreen():frame()
+    local x = screen.x + screen.w - KS_W - 16
+    local y = screen.y + 8
+
+    local c = hs.canvas.new({ x = x, y = y, w = KS_W, h = KS_H })
+
+    -- 1: background
+    c:appendElements({
+        type = "rectangle",
+        action = "fill",
+        fillColor = { red = 0.04, green = 0, blue = 0, alpha = 0.92 },
+        roundedRectRadii = { xRadius = 8, yRadius = 8 },
+    })
+    -- 2: border
+    c:appendElements({
+        id = "border",
+        type = "rectangle",
+        action = "stroke",
+        strokeColor = { red = 1, green = 0.4, blue = 0, alpha = 1 },
+        strokeWidth = 2,
+        roundedRectRadii = { xRadius = 8, yRadius = 8 },
+    })
+    -- 3: NERV label
+    c:appendElements({
+        type = "text",
+        text = "NERV",
+        textColor = { red = 1, green = 0.48, blue = 0, alpha = 1 },
+        textSize = 20,
+        textFont = "Impact",
+        frame = { x = "6%", y = "12%", w = "30%", h = "76%" },
+    })
+    -- 4: status dot
+    c:appendElements({
+        id = "dot",
+        type = "circle",
+        action = "fill",
+        fillColor = { red = 0, green = 0.8, blue = 0.27, alpha = 1 },
+        center = { x = "44%", y = "50%" },
+        radius = "8%",
+    })
+    -- 5: status text
+    c:appendElements({
+        id = "status",
+        type = "text",
+        text = "待機中",
+        textColor = { red = 0.93, green = 0.93, blue = 0.93, alpha = 1 },
+        textSize = 16,
+        textFont = "HiraginoSans-W7",
+        frame = { x = "50%", y = "12%", w = "46%", h = "76%" },
+    })
+
+    c:level(hs.drawing.windowLevels.floating)
+    c:canvasMouseEvents(true, true, false, true)
+
+    local drag = nil
+    c:mouseCallback(function(canvas, msg, id, mx, my)
+        if msg == "mouseDown" then
+            local pos = hs.mouse.absolutePosition()
+            local f   = canvas:frame()
+            drag = { ox = pos.x - f.x, oy = pos.y - f.y, moved = false }
+        elseif msg == "mouseUp" then
+            if drag and not drag.moved then
+                toggleShield()
+            end
+            drag = nil
+        elseif msg == "mouseMove" and drag then
+            local pos = hs.mouse.absolutePosition()
+            canvas:frame({
+                x = pos.x - drag.ox,
+                y = pos.y - drag.oy,
+                w = KS_W, h = KS_H,
+            })
+            drag.moved = true
+        end
+    end)
+
+    c:show()
+    return c
+end
+
+hs.hotkey.bind(MODS, KEY, function() toggleShield() end)
+
+state.killSwitch = createKillSwitch()
 hs.alert.show("Privacy Shield — EVA — ⌃⌥⌘H")
