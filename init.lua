@@ -10,6 +10,7 @@ local KEEP_APP   = "iTerm2"
 
 local IMAGES_DIR = "images/eva"
 local FONTS_DIR  = "fonts"
+local VIDEOS_DIR = "videos"
 
 local MIME = {
     png  = "image/png",
@@ -351,6 +352,49 @@ local function buildOverlay(screen)
     return wv
 end
 
+-- Find first video file in videos/ folder.
+local function findVideo()
+    local dir = scriptDir() .. VIDEOS_DIR
+    if not hs.fs.attributes(dir) then return nil, nil end
+    for file in hs.fs.dir(dir) do
+        local ext = file:lower():match("%.(%w+)$")
+        if ext == "mp4" or ext == "webm" or ext == "mov" then
+            return dir, file
+        end
+    end
+    return nil, nil
+end
+
+-- Full-screen video overlay (primary monitor in F mode).
+local function buildVideoOverlay(screen)
+    local videoDir, videoName = findVideo()
+    if not videoDir then return buildOverlay(screen) end
+
+    local frame   = screen:fullFrame()
+    local htmlPath = videoDir .. "/_player.html"
+
+    local f = io.open(htmlPath, "w")
+    f:write(
+        "<!DOCTYPE html><html><head><meta charset='utf-8'><style>"
+        .. "html,body{margin:0;padding:0;width:100vw;height:100vh;overflow:hidden;background:#000;}"
+        .. "video{width:100%;height:100%;object-fit:cover;}"
+        .. "</style></head><body>"
+        .. "<video autoplay muted loop playsinline>"
+        .. "<source src='" .. videoName .. "' type='video/mp4'>"
+        .. "</video></body></html>")
+    f:close()
+
+    local wv = hs.webview.new(frame)
+    wv:windowStyle({ "borderless" })
+    wv:level(hs.drawing.windowLevels.overlay)
+    wv:shadow(false)
+    wv:allowTextEntry(false)
+    wv:url("file://" .. htmlPath)
+    wv:bringToFront(true)
+    wv:show()
+    return wv
+end
+
 local function hideOtherApps()
     local hidden = {}
     for _, app in ipairs(hs.application.runningApplications()) do
@@ -403,8 +447,11 @@ end
 local function activateFull()
     if state.active then deactivate() end
     math.randomseed(os.time())
-    for _, screen in ipairs(hs.screen.allScreens()) do
-        table.insert(state.overlays, buildOverlay(screen))
+    local screens = hs.screen.allScreens()
+    -- Primary: video overlay; remaining: NERV HUD.
+    table.insert(state.overlays, buildVideoOverlay(screens[1]))
+    for i = 2, #screens do
+        table.insert(state.overlays, buildOverlay(screens[i]))
     end
     state.active = true
     state.mode   = "full"

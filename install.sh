@@ -43,7 +43,7 @@ curl -fsSL "https://github.com/${REPO}/archive/refs/heads/${BRANCH}.tar.gz" \
     | tar -xz -C "$TMP"
 SRC="$TMP/privacy-monitor-${BRANCH}"
 
-mkdir -p "$DEST/images" "$DEST/fonts"
+mkdir -p "$DEST/images" "$DEST/fonts" "$DEST/videos"
 cp "$SRC/init.lua" "$DEST/init.lua"
 [ -f "$SRC/README.md" ] && cp "$SRC/README.md" "$DEST/README.md"
 
@@ -63,6 +63,7 @@ copy_tree_preserving() {
 }
 copy_tree_preserving "$SRC/images" "$DEST/images"
 copy_tree_preserving "$SRC/fonts"  "$DEST/fonts"
+copy_tree_preserving "$SRC/videos" "$DEST/videos"
 
 mkdir -p "$HS_DIR"
 if [ -f "$HS_INIT" ]; then
