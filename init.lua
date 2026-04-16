@@ -1,16 +1,15 @@
 -- Privacy Shield — EVA edition.
--- 特務機関 NERV 모드: 사도 요격 경보를 두 번째 모니터에 띄운다.
--- Hotkey: Control + Option + Command + H
+-- 特務機関 NERV 모드: 사도 요격 경보를 모니터에 띄운다.
+-- ⌃⌥⌘H: 두 번째 모니터에만 오버레이
+-- ⌃⌥⌘F: 전 모니터에 오버레이 (전역 차단)
 
-local MODS = { "ctrl", "alt", "cmd" }
-local KEY  = "H"
-local KEEP_APP = "iTerm2"
+local MODS       = { "ctrl", "alt", "cmd" }
+local KEY_SECOND = "H"
+local KEY_FULL   = "F"
+local KEEP_APP   = "iTerm2"
 
 local IMAGES_DIR = "images/eva"
 local FONTS_DIR  = "fonts"
-
--- Drop a .ttf / .otf into the fonts/ folder to override the "NERV" font face.
--- If empty, falls back to macOS system heavy fonts (very close to Eva UI look).
 
 local MIME = {
     png  = "image/png",
@@ -29,23 +28,28 @@ local FONT_MIME = {
     woff2 = "font/woff2",
 }
 
-local KS_W, KS_H = 210, 50
+local KS_W, KS_H = 190, 50
 
 -- Cleanup previous load (prevents duplicates on Reload Config).
 if _G._privacyShield then
     local old = _G._privacyShield
-    if old.hotkey then old.hotkey:delete() end
-    if old.killSwitch then old.killSwitch:delete() end
-    if old.overlay then old.overlay:delete() end
+    if old.hotkeySecond then old.hotkeySecond:delete() end
+    if old.hotkeyFull   then old.hotkeyFull:delete() end
+    if old.ks1 then old.ks1:delete() end
+    if old.ks2 then old.ks2:delete() end
+    if old.overlays then
+        for _, o in ipairs(old.overlays) do pcall(function() o:delete() end) end
+    end
 end
 _G._privacyShield = {}
 
 local state = {
     active      = false,
-    overlay     = nil,
+    mode        = nil,   -- nil | "second" | "full"
+    overlays    = {},
     hiddenApps  = {},
-    previousApp = nil,
-    killSwitch  = nil,
+    ks1         = nil,
+    ks2         = nil,
 }
 
 local function scriptDir()
@@ -82,7 +86,6 @@ local function shuffle(t)
     end
 end
 
--- Scatter images on a grid with jitter — no overlaps, still chaotic.
 local function scatter(frame, images)
     local n = #images
     if n == 0 then return {} end
@@ -118,7 +121,6 @@ end
 local function buildFontFace()
     local fonts = listFiles(FONTS_DIR, FONT_MIME)
     if #fonts == 0 then return "" end
-    -- Use the first font file as the NERV face.
     local uri = fileToDataURI(fonts[1], FONT_MIME)
     if not uri then return "" end
     return string.format([[
@@ -332,16 +334,8 @@ html, body {
     })
 end
 
-local function buildOverlay()
-    local screens = hs.screen.allScreens()
-    if #screens < 2 then
-        hs.alert.show("Privacy Shield: no second monitor detected")
-        return nil
-    end
-
-    math.randomseed(os.time())
-
-    local frame = screens[2]:fullFrame()
+local function buildOverlay(screen)
+    local frame = screen:fullFrame()
     local html  = buildHTML(frame)
 
     local wv = hs.webview.new(frame)
@@ -377,102 +371,109 @@ local function restoreApps(apps)
     end
 end
 
-local function activate()
-    state.previousApp = hs.application.frontmostApplication()
-    state.hiddenApps  = hideOtherApps()
-    state.overlay     = buildOverlay()
-
-    local iterm = hs.application.find(KEEP_APP)
-    if iterm then iterm:activate(true) end
-
-    state.active = true
-end
-
 local function deactivate()
-    if state.overlay then
-        state.overlay:delete()
-        state.overlay = nil
+    for _, wv in ipairs(state.overlays) do
+        pcall(function() wv:delete() end)
     end
+    state.overlays = {}
     restoreApps(state.hiddenApps)
     state.hiddenApps = {}
     state.active = false
+    state.mode   = nil
 end
 
--- Kill switch: floating NERV-style toggle button, always on top, draggable.
-local function updateKillSwitch()
-    local ks = state.killSwitch
-    if not ks then return end
-    if state.active then
-        ks["dot"].fillColor    = { red = 1, green = 0, blue = 0, alpha = 1 }
-        ks["status"].text      = "迎撃中"
-        ks["status"].textColor = { red = 1, green = 0.2, blue = 0.1, alpha = 1 }
-        ks["border"].strokeColor = { red = 1, green = 0, blue = 0, alpha = 1 }
-    else
-        ks["dot"].fillColor    = { red = 0, green = 0.8, blue = 0.27, alpha = 1 }
-        ks["status"].text      = "待機中"
-        ks["status"].textColor = { red = 0.93, green = 0.93, blue = 0.93, alpha = 1 }
-        ks["border"].strokeColor = { red = 1, green = 0.4, blue = 0, alpha = 1 }
+local function activateSecond()
+    if state.active then deactivate() end
+    local screens = hs.screen.allScreens()
+    if #screens < 2 then
+        hs.alert.show("Privacy Shield: no second monitor detected")
+        return
     end
+    math.randomseed(os.time())
+    state.hiddenApps = hideOtherApps()
+    table.insert(state.overlays, buildOverlay(screens[2]))
+    local iterm = hs.application.find(KEEP_APP)
+    if iterm then iterm:activate(true) end
+    state.active = true
+    state.mode   = "second"
 end
 
-local function toggleShield()
-    if state.active then deactivate() else activate() end
-    updateKillSwitch()
+local function activateFull()
+    if state.active then deactivate() end
+    math.randomseed(os.time())
+    for _, screen in ipairs(hs.screen.allScreens()) do
+        table.insert(state.overlays, buildOverlay(screen))
+    end
+    state.active = true
+    state.mode   = "full"
 end
 
-local function createKillSwitch()
-    local screen = hs.screen.primaryScreen():frame()
-    local x = screen.x + screen.w - KS_W - 16
-    local y = screen.y + 8
+-- Kill switches ---------------------------------------------------------------
 
-    local c = hs.canvas.new({ x = x, y = y, w = KS_W, h = KS_H })
+local function updateKillSwitches()
+    local function applyStyle(ks, on)
+        if not ks then return end
+        if on then
+            ks["dot"].fillColor      = { red = 1, green = 0, blue = 0, alpha = 1 }
+            ks["status"].text        = "迎撃中"
+            ks["status"].textColor   = { red = 1, green = 0.2, blue = 0.1, alpha = 1 }
+            ks["border"].strokeColor = { red = 1, green = 0, blue = 0, alpha = 1 }
+        else
+            ks["dot"].fillColor      = { red = 0, green = 0.8, blue = 0.27, alpha = 1 }
+            ks["status"].text        = "待機中"
+            ks["status"].textColor   = { red = 0.93, green = 0.93, blue = 0.93, alpha = 1 }
+            ks["border"].strokeColor = { red = 1, green = 0.4, blue = 0, alpha = 1 }
+        end
+    end
+    applyStyle(state.ks1, state.mode == "second")
+    applyStyle(state.ks2, state.mode == "full")
+end
 
-    -- 1: background
+local function toggleSecond()
+    if state.active and state.mode == "second" then deactivate()
+    else activateSecond() end
+    updateKillSwitches()
+end
+
+local function toggleFull()
+    if state.active and state.mode == "full" then deactivate()
+    else activateFull() end
+    updateKillSwitches()
+end
+
+local function createKillSwitch(title, xPos, yPos, toggleFn)
+    local c = hs.canvas.new({ x = xPos, y = yPos, w = KS_W, h = KS_H })
+
     c:appendElements({
-        type = "rectangle",
-        action = "fill",
+        type = "rectangle", action = "fill",
         fillColor = { red = 0.04, green = 0, blue = 0, alpha = 0.92 },
         roundedRectRadii = { xRadius = 8, yRadius = 8 },
     })
-    -- 2: border
     c:appendElements({
-        id = "border",
-        type = "rectangle",
-        action = "stroke",
+        id = "border", type = "rectangle", action = "stroke",
         strokeColor = { red = 1, green = 0.4, blue = 0, alpha = 1 },
         strokeWidth = 2,
         roundedRectRadii = { xRadius = 8, yRadius = 8 },
     })
-    -- 3: NERV label
     c:appendElements({
-        type = "text",
-        text = "NERV",
+        type = "text", text = title,
         textColor = { red = 1, green = 0.48, blue = 0, alpha = 1 },
-        textSize = 20,
-        textFont = "Impact",
-        frame = { x = "6%", y = "12%", w = "30%", h = "76%" },
+        textSize = 18, textFont = "Impact",
+        frame = { x = "5%", y = "10%", w = "32%", h = "80%" },
     })
-    -- 4: status dot
     c:appendElements({
-        id = "dot",
-        type = "circle",
-        action = "fill",
+        id = "dot", type = "circle", action = "fill",
         fillColor = { red = 0, green = 0.8, blue = 0.27, alpha = 1 },
-        center = { x = "44%", y = "50%" },
-        radius = "8%",
+        center = { x = "44%", y = "50%" }, radius = "8%",
     })
-    -- 5: status text
     c:appendElements({
-        id = "status",
-        type = "text",
-        text = "待機中",
+        id = "status", type = "text", text = "待機中",
         textColor = { red = 0.93, green = 0.93, blue = 0.93, alpha = 1 },
-        textSize = 16,
-        textFont = "HiraginoSans-W7",
-        frame = { x = "50%", y = "12%", w = "46%", h = "76%" },
+        textSize = 16, textFont = "HiraginoSans-W7",
+        frame = { x = "50%", y = "10%", w = "46%", h = "80%" },
     })
 
-    c:level(hs.drawing.windowLevels.floating)
+    c:level(hs.drawing.windowLevels.screenSaver)
     c:canvasMouseEvents(true, true, false, true)
 
     local drag = nil
@@ -482,17 +483,11 @@ local function createKillSwitch()
             local f   = canvas:frame()
             drag = { ox = pos.x - f.x, oy = pos.y - f.y, moved = false }
         elseif msg == "mouseUp" then
-            if drag and not drag.moved then
-                toggleShield()
-            end
+            if drag and not drag.moved then toggleFn() end
             drag = nil
         elseif msg == "mouseMove" and drag then
             local pos = hs.mouse.absolutePosition()
-            canvas:frame({
-                x = pos.x - drag.ox,
-                y = pos.y - drag.oy,
-                w = KS_W, h = KS_H,
-            })
+            canvas:frame({ x = pos.x - drag.ox, y = pos.y - drag.oy, w = KS_W, h = KS_H })
             drag.moved = true
         end
     end)
@@ -501,8 +496,16 @@ local function createKillSwitch()
     return c
 end
 
-_G._privacyShield.hotkey    = hs.hotkey.bind(MODS, KEY, function() toggleShield() end)
-state.killSwitch            = createKillSwitch()
-_G._privacyShield.killSwitch = state.killSwitch
+-- Bootstrap -------------------------------------------------------------------
 
-hs.alert.show("Privacy Shield — EVA — ⌃⌥⌘H")
+_G._privacyShield.hotkeySecond = hs.hotkey.bind(MODS, KEY_SECOND, toggleSecond)
+_G._privacyShield.hotkeyFull   = hs.hotkey.bind(MODS, KEY_FULL,   toggleFull)
+
+local scr = hs.screen.primaryScreen():frame()
+state.ks1 = createKillSwitch("NERV", scr.x + scr.w - KS_W - 16,     scr.y + 8, toggleSecond)
+state.ks2 = createKillSwitch("全域", scr.x + scr.w - KS_W * 2 - 24, scr.y + 8, toggleFull)
+_G._privacyShield.ks1      = state.ks1
+_G._privacyShield.ks2      = state.ks2
+_G._privacyShield.overlays = state.overlays
+
+hs.alert.show("Privacy Shield — EVA — ⌃⌥⌘H / ⌃⌥⌘F")
