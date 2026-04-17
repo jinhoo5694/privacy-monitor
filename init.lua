@@ -1,16 +1,17 @@
--- Privacy Shield: hide everything except iTerm2, taunt the creeper.
--- ⌃⌥⌘H: overlay on second monitor only (keep iTerm2 on primary)
--- ⌃⌥⌘F: overlay on ALL monitors (total blackout)
+-- Privacy Shield — 망그러진곰 edition.
+-- 모니터 훔쳐보는 동료 퇴치용 (귀엽게)
+-- ⌃⌥⌘H: 두 번째 모니터에만 오버레이
+-- ⌃⌥⌘F: 전 모니터에 오버레이 (전역 차단)
 
 local MODS       = { "ctrl", "alt", "cmd" }
 local KEY_SECOND = "H"
 local KEY_FULL   = "F"
 local KEEP_APP   = "iTerm2"
 
-local MESSAGE = "남의 모니터 뭐가 그래 재밌어보이노 그만봐라"
-local EMOJI   = "👀"
+local MESSAGE = "훔쳐보지 마... 망곰이가 보고 있다구..."
+local EMOJI   = "(o_o )"
 
-local IMAGES_DIR = "images"
+local IMAGES_DIR = "images/bear"
 
 local MIME = {
     png  = "image/png",
@@ -22,7 +23,7 @@ local MIME = {
     webp = "image/webp",
 }
 
-local KS_W, KS_H = 160, 44
+local KS_W, KS_H = 170, 44
 
 -- Cleanup previous load (prevents duplicates on Reload Config).
 if _G._privacyShield then
@@ -40,7 +41,7 @@ _G._privacyShield = {}
 
 local state = {
     active      = false,
-    mode        = nil,   -- nil | "second" | "full"
+    mode        = nil,
     overlays    = {},
     hiddenApps  = {},
     ks1         = nil,
@@ -133,18 +134,93 @@ local function buildHTML(frame)
     end
 
     local css = [[
-html,body{margin:0;padding:0;background:#000;width:100vw;height:100vh;overflow:hidden;
-  font-family:"Apple SD Gothic Neo",-apple-system,sans-serif;}
-img{position:absolute;object-fit:contain;}
-.emoji{position:absolute;top:18%;left:0;width:100%;text-align:center;font-size:220px;}
-.msg{position:absolute;top:35%;left:3%;width:94%;height:20%;text-align:center;
-  color:#fff;font-size:80px;font-weight:700;background:rgba(0,0,0,0.78);
-  display:flex;align-items:center;justify-content:center;}
+@keyframes floatDots {
+  0%, 100% { opacity: 0.25; }
+  50% { opacity: 0.55; }
+}
+html, body {
+  margin: 0; padding: 0;
+  width: 100vw; height: 100vh;
+  overflow: hidden;
+  font-family: "Apple SD Gothic Neo", -apple-system, sans-serif;
+  background: #FFEBEE;
+}
+body::before {
+  content: "";
+  position: fixed; inset: 0;
+  background:
+    radial-gradient(circle, rgba(244,143,177,0.25) 2px, transparent 2px),
+    radial-gradient(circle, rgba(255,183,77,0.2) 2px, transparent 2px);
+  background-size: 60px 60px, 80px 80px;
+  background-position: 0 0, 30px 40px;
+  animation: floatDots 4s ease-in-out infinite;
+  pointer-events: none;
+  z-index: 1;
+}
+img {
+  position: absolute;
+  object-fit: contain;
+  z-index: 5;
+  filter: drop-shadow(0 4px 12px rgba(0,0,0,0.1));
+}
+.emoji {
+  position: absolute;
+  top: 15%; left: 0; width: 100%;
+  text-align: center;
+  font-size: 180px;
+  color: #5D4037;
+  z-index: 5;
+}
+.msg-box {
+  position: absolute;
+  top: 35%; left: 50%;
+  transform: translateX(-50%);
+  max-width: 90%;
+  padding: 36px 56px;
+  background: rgba(255, 255, 255, 0.92);
+  border-radius: 32px;
+  border: 3px solid #F48FB1;
+  box-shadow: 0 8px 40px rgba(244,143,177,0.3);
+  text-align: center;
+  z-index: 10;
+}
+.msg-box .text {
+  color: #4E342E;
+  font-size: 56px;
+  font-weight: 800;
+  line-height: 1.4;
+}
+.msg-box .sub {
+  margin-top: 16px;
+  color: #F48FB1;
+  font-size: 28px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+}
+.corner-label {
+  position: absolute;
+  bottom: 3%; right: 3%;
+  color: #F48FB1;
+  font-size: 32px;
+  font-weight: 900;
+  letter-spacing: 0.15em;
+  opacity: 0.7;
+  z-index: 10;
+}
 ]]
 
-    return "<!DOCTYPE html><html><head><meta charset='utf-8'><style>" ..
-           css .. "</style></head><body>" .. imgsHtml ..
-           "<div class='msg'>" .. MESSAGE .. "</div></body></html>"
+    return table.concat({
+        "<!DOCTYPE html><html><head><meta charset='utf-8'><style>",
+        css,
+        "</style></head><body>",
+        imgsHtml,
+        "<div class='msg-box'>",
+          "<div class='text'>", MESSAGE, "</div>",
+          "<div class='sub'>- mangom -</div>",
+        "</div>",
+        "<div class='corner-label'>mangom shield</div>",
+        "</body></html>",
+    })
 end
 
 local function buildOverlay(screen)
@@ -214,7 +290,6 @@ end
 local function activateFull()
     if state.active then deactivate() end
     math.randomseed(os.time())
-    -- Don't hide apps — opaque overlay covers everything anyway.
     for _, screen in ipairs(hs.screen.allScreens()) do
         table.insert(state.overlays, buildOverlay(screen))
     end
@@ -228,15 +303,15 @@ local function updateKillSwitches()
     local function applyStyle(ks, on)
         if not ks then return end
         if on then
-            ks["dot"].fillColor      = { red = 1, green = 0.15, blue = 0.1, alpha = 1 }
+            ks["dot"].fillColor      = { red = 0.96, green = 0.26, blue = 0.21, alpha = 1 }
             ks["label"].text         = "ON"
-            ks["label"].textColor    = { red = 1, green = 0.2, blue = 0.1, alpha = 1 }
-            ks["border"].strokeColor = { red = 1, green = 0.15, blue = 0.1, alpha = 1 }
+            ks["label"].textColor    = { red = 0.96, green = 0.26, blue = 0.21, alpha = 1 }
+            ks["border"].strokeColor = { red = 0.96, green = 0.56, blue = 0.69, alpha = 1 }
         else
-            ks["dot"].fillColor      = { red = 0, green = 0.75, blue = 0.3, alpha = 1 }
+            ks["dot"].fillColor      = { red = 0.56, green = 0.79, blue = 0.59, alpha = 1 }
             ks["label"].text         = "OFF"
-            ks["label"].textColor    = { red = 0.85, green = 0.85, blue = 0.85, alpha = 1 }
-            ks["border"].strokeColor = { red = 0.4, green = 0.4, blue = 0.4, alpha = 1 }
+            ks["label"].textColor    = { red = 0.55, green = 0.45, blue = 0.4, alpha = 1 }
+            ks["border"].strokeColor = { red = 0.85, green = 0.75, blue = 0.72, alpha = 1 }
         end
     end
     applyStyle(state.ks1, state.mode == "second")
@@ -260,34 +335,33 @@ local function createKillSwitch(title, xPos, yPos, toggleFn)
 
     c:appendElements({
         type = "rectangle", action = "fill",
-        fillColor = { red = 0.1, green = 0.1, blue = 0.1, alpha = 0.92 },
-        roundedRectRadii = { xRadius = 8, yRadius = 8 },
+        fillColor = { red = 1, green = 0.97, blue = 0.95, alpha = 0.95 },
+        roundedRectRadii = { xRadius = 12, yRadius = 12 },
     })
     c:appendElements({
         id = "border", type = "rectangle", action = "stroke",
-        strokeColor = { red = 0.4, green = 0.4, blue = 0.4, alpha = 1 },
+        strokeColor = { red = 0.85, green = 0.75, blue = 0.72, alpha = 1 },
         strokeWidth = 2,
-        roundedRectRadii = { xRadius = 8, yRadius = 8 },
+        roundedRectRadii = { xRadius = 12, yRadius = 12 },
     })
     c:appendElements({
         type = "text", text = title,
-        textColor = { red = 0.85, green = 0.85, blue = 0.85, alpha = 1 },
-        textSize = 16, textFont = "Helvetica-Bold",
+        textColor = { red = 0.36, green = 0.2, blue = 0.17, alpha = 1 },
+        textSize = 15, textFont = "AppleSDGothicNeo-Bold",
         frame = { x = "6%", y = "12%", w = "38%", h = "76%" },
     })
     c:appendElements({
         id = "dot", type = "circle", action = "fill",
-        fillColor = { red = 0, green = 0.75, blue = 0.3, alpha = 1 },
+        fillColor = { red = 0.56, green = 0.79, blue = 0.59, alpha = 1 },
         center = { x = "52%", y = "50%" }, radius = "9%",
     })
     c:appendElements({
         id = "label", type = "text", text = "OFF",
-        textColor = { red = 0.85, green = 0.85, blue = 0.85, alpha = 1 },
-        textSize = 14, textFont = "Helvetica-Bold",
+        textColor = { red = 0.55, green = 0.45, blue = 0.4, alpha = 1 },
+        textSize = 13, textFont = "AppleSDGothicNeo-Bold",
         frame = { x = "58%", y = "12%", w = "38%", h = "76%" },
     })
 
-    -- screenSaver level so buttons stay above overlays in full mode.
     c:level(hs.drawing.windowLevels.screenSaver)
     c:canvasMouseEvents(true, true, false, true)
 
@@ -326,14 +400,14 @@ end
 
 local function createMenubar()
     local mb = hs.menubar.new()
-    mb:setTitle("S")
+    mb:setTitle("B")
     mb:setMenu(function()
         local modeLabel = "OFF"
         if state.mode == "second" then modeLabel = "2nd Monitor"
         elseif state.mode == "full" then modeLabel = "Full" end
 
         return {
-            { title = "Privacy Shield", disabled = true },
+            { title = "Privacy Shield - mangom", disabled = true },
             { title = "-" },
             { title = state.ksVisible and "Hide Buttons" or "Show Buttons",
               fn = toggleKsVisibility },
@@ -357,11 +431,11 @@ _G._privacyShield.hotkeySecond = hs.hotkey.bind(MODS, KEY_SECOND, toggleSecond)
 _G._privacyShield.hotkeyFull   = hs.hotkey.bind(MODS, KEY_FULL,   toggleFull)
 
 local scr = hs.screen.primaryScreen():frame()
-state.ks1 = createKillSwitch("2nd",  scr.x + scr.w - KS_W - 16,     scr.y + 8, toggleSecond)
-state.ks2 = createKillSwitch("Full", scr.x + scr.w - KS_W * 2 - 24, scr.y + 8, toggleFull)
+state.ks1 = createKillSwitch("mangom", scr.x + scr.w - KS_W - 16,     scr.y + 8, toggleSecond)
+state.ks2 = createKillSwitch("full",   scr.x + scr.w - KS_W * 2 - 24, scr.y + 8, toggleFull)
 _G._privacyShield.ks1      = state.ks1
 _G._privacyShield.ks2      = state.ks2
 _G._privacyShield.overlays = state.overlays
 _G._privacyShield.menubar  = createMenubar()
 
-hs.alert.show("Privacy Shield loaded — ⌃⌥⌘H / ⌃⌥⌘F")
+hs.alert.show("Privacy Shield - mangom - ⌃⌥⌘H / ⌃⌥⌘F")

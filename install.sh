@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # privacy-monitor installer
-# Usage: curl -fsSL https://raw.githubusercontent.com/jinhoo5694/privacy-monitor/main/install.sh | bash
+# Usage: curl -fsSL https://raw.githubusercontent.com/jinhoo5694/privacy-monitor/bear/install.sh | bash
 set -euo pipefail
 
 REPO="jinhoo5694/privacy-monitor"
-BRANCH="main"
+BRANCH="bear"
 DEST="$HOME/.hammerspoon/privacy-shield"
 HS_DIR="$HOME/.hammerspoon"
 HS_INIT="$HS_DIR/init.lua"
